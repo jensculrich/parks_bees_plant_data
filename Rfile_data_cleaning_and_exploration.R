@@ -202,12 +202,18 @@ quadrat_data %>%
 
 ### Read in the bee data
 
+library(tidyverse)
+
+
 bee_data<-read.csv("./bee_data_2021.csv")
 
-str(bee_data)
-
 bee_data %>% 
-  group_by(site, bee_id) %>% 
+  mutate(treatment=ifelse(site=="rupert"|site=="slocan"|site=="bobolink"|site=="gordon"|site=="moberly"|site=="winona"|site=="balaclava"|site=="quilchena"|site=="kensington", "1", "0"))->bee_data1
+
+str(bee_data1)
+
+bee_data1 %>% 
+  group_by(site, treatment) %>% 
   summarise(sum_inds=sum(n_distinct(bee_id)))->bee_abundance
 
 bee_data %>% 
@@ -221,20 +227,65 @@ bee_data %>%
   filter(bee_id=="Bombus ?"|bee_id=="Bombus impatiens"|bee_id=="Bombus mixtus"|bee_id=="Bombus sp."|bee_id=="Bombus flavifrons"|bee_id=="Bombus melanopygus"|bee_id=="Bombus nevadensis"|bee_id=="Bombus vosnesenskii")->numbombus
 
 # 674 individuals are in Bombus-- about 674/1869 total individuals
+# first, add genera to each observation using mutate
 
-bee_data %>% 
+bee_data1 %>% 
   mutate(genus= case_when((bee_id=="Bombus ?"|bee_id=="Bombus impatiens"|bee_id=="Bombus mixtus"|bee_id=="Bombus sp."|bee_id=="Bombus flavifrons"|bee_id=="Bombus melanopygus"|bee_id=="Bombus nevadensis"|bee_id=="Bombus vosnesenskii")~"Bombus", (bee_id=="Halictus"|bee_id=="Halictus "|bee_id=="Halictus rubicundus")~"Halictus", (bee_id=="Agapostemon")~"Agapestemon", (bee_id=="Anthidium")~"Anthidium", (bee_id=="Andrena")~"Andrena", (bee_id=="Apis mellifera")~"Apis", (bee_id=="Ceratina")~"Ceratina", (bee_id=="Colletes")~"Colletes", (bee_id=="Hoplitis")~"Hoplitis", (bee_id=="Hylaeus")~"Hylaeus", (bee_id=="Lasioglossum")~"Lasioglossum", (bee_id=="Megachile")~"Megachile", (bee_id=="Melecta")~"Melecta", (bee_id=="Melissodes")~"Melissodes", (bee_id=="Nomada")~"Nomada", (bee_id=="Osmia")~"Osmia", (bee_id=="Sphecodes")~"Sphecodes", (bee_id=="Syrphidae")~"Syrphidae", TRUE~"Other"))->bee_data_genus
 
+# For the purposes of making a table with the number of genera in each park, let's get rid of the unknown, or "other" genera
 bee_data_genus %>% 
   subset(genus!="Other")->bee_data_genus
 
 bee_data_genus %>% 
-  group_by(site) %>% 
-  summarise(sum_genera=sum(n_distinct(genus)))->bee_abundance
+  group_by(site, treatment) %>% 
+  summarise(sum_genera=sum(n_distinct(genus)))->bee_diversity
 
-bee-data_genus %>% 
-  group_by(genus) %>% 
-  summarise(sum_inds=sum(n_distinct))
+# let's check that this is working correctly
+
+balaclava<-bee_data %>% 
+  filter(site=="balaclava") %>% 
+  group_by(bee_id)
+
+ggplot(bee_diversity, aes(x=treatment, y=sum_genera))+
+  geom_boxplot(stat="boxplot")
+ # xlab("treatment")+
+  #ylab=("total number of genera found at each site")
+
+# what if I used mutate instead, to create a line for each round of sampling, and then made a linear model?
+
+bee_data_genus %>% 
+  group_by(site, sampling_round) %>% 
+  mutate(sum_genera=sum(n_distinct(genus)) %>%(summarise_all(mean, na.rm = TRUE))->bee_diversity_round
+         
+
+bee_data_genus %>% 
+  group_by(sampling_round, site) %>% 
+  transmute(sum_genera=sum(n_distinct(genus)), sum_plant_family=sum(n_distinct(plant_netted_from_famly)), treatment=treatment) %>% 
+  distinct(site, .keep_all = TRUE)->bee_diversity_round
+
+lmround<-lm(sum_genera~treatment, data=bee_diversity)
+summary(lmround)
+anova(lmround)
+# ok so this would suggest that there is a significant difference in bee diversity between the two parks, with unmowed parks having highr bee diversity than mowed parks.
+# Problem: this appears to somehow be combining the extra rounds of sampling into one?
+
+# how many plants species are being netted off of?
+
+levels(bee_data_genus$plant_netted_from_sci_name)
+
+# 69 species (some bee specimens have not been linked to a plant species)
+
+# What is the most common plant being netted off of in these parks?
+
+bee_data_genus %>% 
+  group_by(plant_netted_from_sci_name) %>% 
+  summarise(numobservations=n_distinct(unique_specimen_id))->most_common_plants
+
+sum(most_common_plants$numobservations)
+# five most common plants being netted off of are trifolium repens, Hypochaeris radicata, Crepis capillaris, Achillea millefolium, and Ranunculus repens
+# note that there are 37 bee ids that have no associated plant species
+
+
   
 
 
