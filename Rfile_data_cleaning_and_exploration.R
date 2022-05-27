@@ -23,7 +23,7 @@ hectare_data<-hectare_data[!is.na(hectare_data$SPECIES),]
 # First, add whether each site is mowed or unmowed. Unmowed=0 and mowed=1.
 # Start with quadrat data
 quadrat_data %>% 
-  mutate(TREATMENT=ifelse(SITE=="Rupert"|SITE=="Slocan"|SITE=="Bobolink"|SITE=="Gordon"|SITE=="Moberly"|SITE=="Winona"|SITE=="Balaclava"|SITE=="Quilchena"|SITE=="Kensington", "1", "0"))->quadrat
+  mutate(TREATMENT=ifelse(SITE=="rupert"|SITE=="slocan"|SITE=="bobolink"|SITE=="gordon"|SITE=="moberly"|SITE=="winona"|SITE=="balaclava"|SITE=="quilchena"|SITE=="kensington", "1", "0"))->quadrat
 
 str(quadrat)
 levels(quadrat$SITE)
@@ -63,7 +63,7 @@ levels(hectare$SPECIES)
 # First, use lubridate to show R how to read the dates
 
 library(lubridate)
-quadrat$DATE<-as.Date(quadrat$DATE, "%m.%d.%Y")
+quadrat$DATE<-as.Date(quadrat$DATE, "%d/%m/%Y")
 hectare$DATE<-as.Date(hectare$DATE, "%m.%d.%Y")
 
 # Next, sort original dataframe by month-- this will put the month into the date column, allowing me to group data by month.
@@ -83,11 +83,11 @@ hectare$NUM_FLORAL_UNITS<-as.numeric(hectare$NUM_FLORAL_UNITS)
 
 # Make a new dataframe with total species and abudance counts (i.e. total number of species and number of floral units observed for each park)
 # Changed abundances to per square metre aka divide by 20
+
 quadrat %>% 
-  na.omit() %>% 
+  #na.omit() %>% 
   group_by(SITE, TREATMENT) %>% 
-  summarise(
-            TOT_ABUND=((sum(NUM_FLORAL_UNITS))/20),
+  mutate(TOT_ABUND=((sum(NUM_FLORAL_UNITS))/20),
             TOT_RICHNESS=n_distinct(SPECIES),
             MAY_TOT_ABUND=((sum(subset(NUM_FLORAL_UNITS, MONTH=="5")))/20),
             MAY_TOT_RICH=n_distinct(subset(SPECIES, MONTH=="5")),
@@ -98,7 +98,26 @@ quadrat %>%
             AUG_TOT_ABUND=((sum(subset(NUM_FLORAL_UNITS, MONTH=="8")))/20),
             AUG_TOT_RICH=n_distinct(subset(SPECIES, MONTH=="8")),
             MEAN_ABUND=mean(c(subset(NUM_FLORAL_UNITS, MONTH=="5"), subset(NUM_FLORAL_UNITS, MONTH=="6"), subset(NUM_FLORAL_UNITS, MONTH=="7"), subset(NUM_FLORAL_UNITS, MONTH=="8"))),
-            MEAN_RICH=mean(c(MAY_TOT_RICH, JUN_TOT_RICH, JUL_TOT_RICH, AUG_TOT_RICH)))->TOT_COUNTS_QUAD
+            MEAN_RICH=mean(c(MAY_TOT_RICH, JUN_TOT_RICH, JUL_TOT_RICH, AUG_TOT_RICH))
+         )->TOT_COUNTS_QUAD1
+
+quadrat$NUM_FLORAL_UNITS[is.na(quadrat$NUM_FLORAL_UNITS)]<-0
+
+quadrat %>% 
+  group_by(SITE, TREATMENT) %>% 
+  summarise(TOT_ABUND=((sum(NUM_FLORAL_UNITS))/20),
+         TOT_RICHNESS=n_distinct(SPECIES),
+         MAY_TOT_ABUND=((sum(subset(NUM_FLORAL_UNITS, MONTH=="5")))/20),
+         MAY_TOT_RICH=n_distinct(subset(SPECIES, MONTH=="5")),
+         JUN_TOT_ABUND=((sum(subset(NUM_FLORAL_UNITS, MONTH=="6")))/20),
+         JUN_TOT_RICH=n_distinct(subset(SPECIES, MONTH=="6")),
+         JUL_TOT_ABUND=((sum(subset(NUM_FLORAL_UNITS, MONTH=="7")))/20), 
+         JUL_TOT_RICH=n_distinct(subset(SPECIES, MONTH=="7")),
+         AUG_TOT_ABUND=((sum(subset(NUM_FLORAL_UNITS, MONTH=="8")))/20),
+         AUG_TOT_RICH=n_distinct(subset(SPECIES, MONTH=="8")),
+         MEAN_ABUND=mean(c(subset(NUM_FLORAL_UNITS, MONTH=="5"), subset(NUM_FLORAL_UNITS, MONTH=="6"), subset(NUM_FLORAL_UNITS, MONTH=="7"), subset(NUM_FLORAL_UNITS, MONTH=="8"))),
+         MEAN_RICH=mean(c(MAY_TOT_RICH, JUN_TOT_RICH, JUL_TOT_RICH, AUG_TOT_RICH))
+  )->TOT_COUNTS_QUAD
 
 
 
@@ -156,8 +175,68 @@ t.test(MEAN_ABUND~TREATMENT, data=TOT_COUNTS_QUAD, var.equal=FALSE)
 # Boxplot showing difference between treatments over the four months of surveys
 
 quadrat %>% 
-  group_by(TREATMENT, MONTH) %>% 
-  summarise(mean_abund=mean
+  na.omit() %>% 
+  group_by(MONTH, TREATMENT) %>% 
+  summarise(mean_abund=mean(NUM_FLORAL_UNITS))->quad_month
+
+ggplot(quad_month, aes(x=TREATMENT, y=mean_abund, fill=quad_month$MONTH))+
+  geom_boxplot(stat="boxplot")
+
+### Time to do a few mixed models. First, make a dataframe that actually works for this type of thing
+
+quadrat$NUM_FLORAL_UNITS[is.na(quadrat$NUM_FLORAL_UNITS)]<-0
+
+quadrat_mlm <- quadrat %>%
+  group_by(SITE, ROUND) %>% 
+  mutate(MEAN_ABUND=mean(NUM_FLORAL_UNITS), MEAN_RICH=mean(n_distinct(SPECIES))) %>%
+  distinct(SITE, .keep_all = TRUE)
+
+### Make list of top ten most abundant plant species in the parks
+
+quadrat_data$SPECIES<-as.factor(quadrat_data$SPECIES)
+
+quadrat_data %>% 
+  group_by(SPECIES) %>% 
+  summarise(sum_inds=sum(NUM_FLORAL_UNITS))->plant_abundance
+
+
+### Read in the bee data
+
+bee_data<-read.csv("./bee_data_2021.csv")
+
+str(bee_data)
+
+bee_data %>% 
+  group_by(site, bee_id) %>% 
+  summarise(sum_inds=sum(n_distinct(bee_id)))->bee_abundance
+
+bee_data %>% 
+  filter(bee_id=="MISSING???")->nummissing
+
+bee_data$bee_id<-as.factor(bee_data$bee_id)
+levels(bee_data$bee_id)
+# 7 missing identifications
+
+bee_data %>% 
+  filter(bee_id=="Bombus ?"|bee_id=="Bombus impatiens"|bee_id=="Bombus mixtus"|bee_id=="Bombus sp."|bee_id=="Bombus flavifrons"|bee_id=="Bombus melanopygus"|bee_id=="Bombus nevadensis"|bee_id=="Bombus vosnesenskii")->numbombus
+
+# 674 individuals are in Bombus-- about 674/1869 total individuals
+
+bee_data %>% 
+  mutate(genus= case_when((bee_id=="Bombus ?"|bee_id=="Bombus impatiens"|bee_id=="Bombus mixtus"|bee_id=="Bombus sp."|bee_id=="Bombus flavifrons"|bee_id=="Bombus melanopygus"|bee_id=="Bombus nevadensis"|bee_id=="Bombus vosnesenskii")~"Bombus", (bee_id=="Halictus"|bee_id=="Halictus "|bee_id=="Halictus rubicundus")~"Halictus", (bee_id=="Agapostemon")~"Agapestemon", (bee_id=="Anthidium")~"Anthidium", (bee_id=="Andrena")~"Andrena", (bee_id=="Apis mellifera")~"Apis", (bee_id=="Ceratina")~"Ceratina", (bee_id=="Colletes")~"Colletes", (bee_id=="Hoplitis")~"Hoplitis", (bee_id=="Hylaeus")~"Hylaeus", (bee_id=="Lasioglossum")~"Lasioglossum", (bee_id=="Megachile")~"Megachile", (bee_id=="Melecta")~"Melecta", (bee_id=="Melissodes")~"Melissodes", (bee_id=="Nomada")~"Nomada", (bee_id=="Osmia")~"Osmia", (bee_id=="Sphecodes")~"Sphecodes", (bee_id=="Syrphidae")~"Syrphidae", TRUE~"Other"))->bee_data_genus
+
+bee_data_genus %>% 
+  subset(genus!="Other")->bee_data_genus
+
+bee_data_genus %>% 
+  group_by(site) %>% 
+  summarise(sum_genera=sum(n_distinct(genus)))->bee_abundance
+
+bee-data_genus %>% 
+  group_by(genus) %>% 
+  summarise(sum_inds=sum(n_distinct))
+  
+
 
 
 
