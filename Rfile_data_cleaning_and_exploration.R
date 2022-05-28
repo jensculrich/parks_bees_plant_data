@@ -10,6 +10,10 @@ getwd()
 install.packages("tidyverse")
 library(tidyverse)
 library(ggplot2)
+install.packages("gtools")
+library(gtools)
+library(lmerTest)
+library(lme4)
 
 ## read data
 # quadrat floral resource data from 2021
@@ -17,8 +21,7 @@ quadrat_data <- read.csv("./quadrat_flower_surveys_2021.csv")
  
 # hectare floral resource data from 2021
 hectare_data <- read.csv("./hectare_floral_surveys_2021.csv")
-hectare_data<-hectare_data[!is.na(hectare_data$SPECIES),]
-
+hectare_data[is.na(hectare_data)]<-0
 ## Clean data
 # First, add whether each site is mowed or unmowed. Unmowed=0 and mowed=1.
 # Start with quadrat data
@@ -35,7 +38,7 @@ levels(quadrat$SITE)
 
 # Next, add treatment column to the hectare data.
 hectare_data %>% 
-  mutate(TREATMENT=ifelse(SITE=="Rupert"|SITE=="Slocan"|SITE=="Bobolink"|SITE=="Gordon"|SITE=="Moberly"|SITE=="Winona"|SITE=="Balaclava"|SITE=="Quilchena"|SITE=="Kensington", "1", "0"))->hectare
+  mutate(TREATMENT=ifelse(SITE=="rupert"|SITE=="slocan"|SITE=="bobolink"|SITE=="gordon"|SITE=="moberly"|SITE=="winona"|SITE=="balaclava"|SITE=="quilchena"|SITE=="kensington", "1", "0"))->hectare
 
 str(hectare)
 
@@ -199,6 +202,33 @@ quadrat_data %>%
   group_by(SPECIES) %>% 
   summarise(sum_inds=sum(NUM_FLORAL_UNITS))->plant_abundance
 
+### What about the hectare data? I read it in earlier in the code and added the treatment (0=unmowed, 1=mowed)
+str(hectare)
+
+hectare %>% 
+  filter(SHRUB_OR_TREE=="Y")->hectare
+
+hectare %>% 
+  group_by(SITE, TREATMENT) %>% 
+  summarise(numfloralunits=sum(NUM_FLORAL_UNITS), richness=n_distinct(SPECIES))->hectare_sites
+
+
+# Falaise, Lorcarno, Gordon, West Memorial, and Queen Elizabeth had the highest diversity of shrubs and trees, while locarno, slocan, falaise, south memorial, and balaclava had the highest number of floral units in total.
+
+ggplot(hectare_sites, aes(x=TREATMENT, y=numfloralunits))+
+  geom_boxplot(stat="boxplot")
+
+lm2<-lm(numfloralunits~TREATMENT, data=hectare_sites)
+summary(lm2)
+anova(lm2)
+t.test(numfloralunits~TREATMENT, data=hectare_sites, var.equal=FALSE)
+
+ggplot(hectare_sites, aes(x=TREATMENT, y=richness))+
+  geom_boxplot(stat="boxplot")
+lm3<-lm(richness~TREATMENT, data=hectare_sites)
+summary(lm3)
+anova(lm3)
+t.test(richness~TREATMENT, data=hectare_sites, var.equal=FALSE)
 
 ### Read in the bee data
 
@@ -240,7 +270,7 @@ bee_data_genus %>%
   group_by(site, treatment) %>% 
   summarise(sum_genera=sum(n_distinct(genus)))->bee_diversity
 
-# let's check that this is working correctly
+# let's check that this is working correctly by seeing counting the number of genera at balaclava
 
 balaclava<-bee_data %>% 
   filter(site=="balaclava") %>% 
@@ -261,13 +291,31 @@ bee_data_genus %>%
 bee_data_genus %>% 
   group_by(sampling_round, site) %>% 
   transmute(sum_genera=sum(n_distinct(genus)), sum_plant_family=sum(n_distinct(plant_netted_from_famly)), treatment=treatment) %>% 
-  distinct(site, .keep_all = TRUE)->bee_diversity_round
+  distinct(site, .keep_all = TRUE)->bee_div_round
 
-lmround<-lm(sum_genera~treatment, data=bee_diversity)
-summary(lmround)
+install.packages("lme4")
+library(lme4)
+install.packages("lmerTest")
+library(lmerTest)
+
+lmerround<-lmer(sum_genera~treatment+(1|sampling_round), data=bee_div_round)
+summary(lmerround)
+
+ggplot(bee_div_round, aes(x=treatment, y=sum_genera))+
+  geom_smooth(stat="smooth", method="lm", aes(colour=sampling_round))
+
+summary(lmerround)
 anova(lmround)
 # ok so this would suggest that there is a significant difference in bee diversity between the two parks, with unmowed parks having highr bee diversity than mowed parks.
 # Problem: this appears to somehow be combining the extra rounds of sampling into one?
+
+# how many bees are being netted at each round?
+
+bee_data_genus %>% 
+  group_by(sampling_round) %>% 
+  summarise(n_distinct(genus))->numbeesperround
+
+ggplot(bee_data_genus, aes(x=))
 
 # how many plants species are being netted off of?
 
