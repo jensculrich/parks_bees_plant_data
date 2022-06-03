@@ -240,13 +240,13 @@ bee_data<-read.csv("./bee_data_2021.csv")
 bee_data %>% 
   mutate(treatment=ifelse(site=="rupert"|site=="slocan"|site=="bobolink"|site=="gordon"|site=="moberly"|site=="winona"|site=="balaclava"|site=="quilchena"|site=="kensington", "1", "0"))->bee_data1
 
-str(bee_data1)
+# str(bee_data1)
 
-bee_data1 %>% 
-  group_by(site, treatment) %>% 
-  summarise(sum_inds=sum(n_distinct(bee_id)))->bee_abundance
+# bee_data1 %>% 
+  #group_by(site, treatment) %>% 
+  #summarise(sum_inds=sum(n_distinct(bee_id)))->bee_abundance
 
-bee_data %>% 
+#bee_data %>% 
   filter(bee_id=="MISSING???")->nummissing
 
 bee_data$bee_id<-as.factor(bee_data$bee_id)
@@ -263,7 +263,7 @@ bee_data1 %>%
   mutate(genus= case_when((bee_id=="Bombus ?"|bee_id=="Bombus impatiens"|bee_id=="Bombus mixtus"|bee_id=="Bombus sp."|bee_id=="Bombus flavifrons"|bee_id=="Bombus melanopygus"|bee_id=="Bombus nevadensis"|bee_id=="Bombus vosnesenskii")~"Bombus", (bee_id=="Halictus"|bee_id=="Halictus "|bee_id=="Halictus rubicundus")~"Halictus", (bee_id=="Agapostemon")~"Agapestemon", (bee_id=="Anthidium")~"Anthidium", (bee_id=="Andrena")~"Andrena", (bee_id=="Apis mellifera")~"Apis", (bee_id=="Ceratina")~"Ceratina", (bee_id=="Colletes")~"Colletes", (bee_id=="Hoplitis")~"Hoplitis", (bee_id=="Hylaeus")~"Hylaeus", (bee_id=="Lasioglossum")~"Lasioglossum", (bee_id=="Megachile")~"Megachile", (bee_id=="Melecta")~"Melecta", (bee_id=="Melissodes")~"Melissodes", (bee_id=="Nomada")~"Nomada", (bee_id=="Osmia")~"Osmia", (bee_id=="Sphecodes")~"Sphecodes", (bee_id=="Syrphidae")~"Syrphidae", TRUE~"Other"))->bee_data_genus
 
 # For the purposes of making a table with the number of genera in each park, let's get rid of the unknown, or "other" genera
-bee_data_genus %>% 
+# bee_data_genus %>% 
   subset(genus!="Other")->bee_data_genus
 
 bee_data_genus %>% 
@@ -278,6 +278,8 @@ balaclava<-bee_data %>%
 
 ggplot(bee_diversity, aes(x=treatment, y=sum_genera))+
   geom_boxplot(stat="boxplot")
+
+t.test(sum_genera~treatment, data=bee_diversity, var.equal=FALSE)
  # xlab("treatment")+
   #ylab=("total number of genera found at each site")
 
@@ -292,6 +294,56 @@ bee_data_genus %>%
   group_by(sampling_round, site) %>% 
   transmute(sum_genera=sum(n_distinct(genus)), sum_plant_family=sum(n_distinct(plant_netted_from_famly)), treatment=treatment) %>% 
   distinct(site, .keep_all = TRUE)->bee_div_round
+
+bee_div_round$sampling_round<-as.factor(bee_div_round$sampling_round)
+
+# is there a difference in genera-level bee diversity in between rounds?
+ggplot(bee_div_round, aes(x=sampling_round, y=sum_genera))+
+  geom_boxplot(stat="boxplot")
+
+lm2<-lm(sum_genera~sampling_round, data=bee_div_round)
+anova(lm2)
+
+# is ther a difference in genera-level bee diversity in between parks?
+
+ggplot(bee_div_round, aes(x=site, y=sum_genera))+
+  geom_boxplot(stat="boxplot")
+
+lm3<-lm(sum_genera~site, data=bee_div_round)
+anova(lm3)
+
+
+## List of interactions 
+
+bee_data_genus %>% 
+  group_by(plant_netted_from_genus) %>% 
+  summarise(n_distinct(genus))->interactionslist
+
+# make list of plant sp. and how many bees were netted off of each one
+bee_data_genus %>% 
+  group_by(plant_netted_from_sci_name) %>% 
+  summarise(num_bees_netted=length(plant_netted_from_sci_name))->plants
+
+# One andrena, one bombus, one melissodes, and one "other" bee have no plant scientific name. Just a heads up as to why there are four observations w/ no associated plant sp.
+# Someone put Solanum dulcamara as the genus for a Solanum observation and I don't know how to fix it. I tried to change it from Solanum dulcamara->Solanum but that does not help because for that observation, no one put the scientific name into the scientific name slot.
+
+bee_data_genus$plant_netted_from_genus[which(bee_data_genus$plant_netted_from_genus=="Solanum dulcamara")]<-"Solanum"
+
+plants %>% 
+  filter(num_bees_netted>3)->interactions_filtered
+
+## What about by round? When did bee sampling peak?
+
+
+bee_data_genus %>% 
+  group_by(sampling_round) %>% 
+  summarise(num_bees_netted=length(plant_netted_from_sci_name))->bees_by_round
+
+
+
+
+
+
 
 install.packages("lme4")
 library(lme4)
