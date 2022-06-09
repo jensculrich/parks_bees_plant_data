@@ -6,88 +6,78 @@
 getwd()
 
 # Installed tidyverse, as I had just redownloaded R and did not have it installed! Ensured that ggplot2 was in my library.
-
-install.packages("tidyverse")
 library(tidyverse)
 library(ggplot2)
-install.packages("gtools")
 library(gtools)
 library(lmerTest)
 library(lme4)
+library(lubridate) # for reading dates
 
-## read data
+## read data (2021 only)
 # quadrat floral resource data from 2021
 quadrat_data <- read.csv("./quadrat_flower_surveys_2021.csv")
  
 # hectare floral resource data from 2021
 hectare_data <- read.csv("./hectare_floral_surveys_2021.csv")
-hectare_data[is.na(hectare_data)]<-0
-## Clean data
-# First, add whether each site is mowed or unmowed. Unmowed=0 and mowed=1.
-# Start with quadrat data
-quadrat_data %>% 
-  mutate(TREATMENT=ifelse(SITE=="rupert"|SITE=="slocan"|SITE=="bobolink"|SITE=="gordon"|SITE=="moberly"|SITE=="winona"|SITE=="balaclava"|SITE=="quilchena"|SITE=="kensington", "1", "0"))->quadrat
 
-str(quadrat)
-levels(quadrat$SITE)
+# data structure
+str(quadrat_data)
+str(hectare_data)
 
-quadrat$SITE[which(quadrat$SITE=="Memorial west")]<-"Memorial West"
-quadrat$SITE[which(quadrat$SITE=="South Memorial")]<-"Memorial South"
-quadrat$SITE<-as.factor(quadrat$SITE)
-levels(quadrat$SITE)
+# recode factors as factors and numeric as numeric
+quadrat_data$SITE <- as.factor(quadrat_data$SITE)
+quadrat_data$SPECIES <- as.factor(quadrat_data$SPECIES)
+quadrat_data$ROUND <- as.factor(quadrat_data$ROUND)
+quadrat_data$NUM_FLORAL_UNITS <- as.numeric(quadrat_data$NUM_FLORAL_UNITS)
 
-# Next, add treatment column to the hectare data.
-hectare_data %>% 
-  mutate(TREATMENT=ifelse(SITE=="rupert"|SITE=="slocan"|SITE=="bobolink"|SITE=="gordon"|SITE=="moberly"|SITE=="winona"|SITE=="balaclava"|SITE=="quilchena"|SITE=="kensington", "1", "0"))->hectare
+hectare_data$SITE <- as.factor(hectare_data$SITE)
+hectare_data$SPECIES <- as.factor(hectare_data$SPECIES)
+hectare_data$ROUND <- as.factor(hectare_data$ROUND)
+hectare_data$NUM_FLORAL_UNITS <- as.numeric(hectare_data$NUM_FLORAL_UNITS)
 
-str(hectare)
+# check levels
+levels(hectare_data$SPECIES)
+levels(hectare_data$SITE)
 
-hectare$SITE[which(hectare$SITE=="South Memorial")]<-"Memorial South"
+# Next, add treatment column to the hectare data and quadrat data.
+# And both site and species as factors.
+# 0 == unmowed/meadow; 1 == mowed biweekly
+quadrat <- quadrat_data %>% 
+  mutate(TREATMENT=as.factor(ifelse(
+    SITE=="rupert"|SITE=="slocan"|SITE=="bobolink"|SITE=="gordon"|
+      SITE=="moberly"|SITE=="winona"|SITE=="balaclava"|SITE=="quilchena"|
+      SITE=="kensington", "1", "0")))
 
-hectare$SITE[which(hectare$SITE=="West Memorial")]<-"Memorial West"
+hectare <- hectare_data %>% 
+  mutate(TREATMENT=as.factor(ifelse(
+    SITE=="rupert"|SITE=="slocan"|SITE=="bobolink"|SITE=="gordon"|
+      SITE=="moberly"|SITE=="winona"|SITE=="balaclava"|SITE=="quilchena"|
+      SITE=="kensington", "1", "0")))
 
-hectare$SITE[which(hectare$SITE=="Memorial west")]<-"Memorial West"
-
-hectare$SITE[which(hectare$SITE=="Lucarno")]<-"Locarno"
-
-hectare$SITE<-as.factor(hectare$SITE)
-levels(hectare$SITE)
-
-# It worked!
-# Time for some more cleaning. I'm going to check out whether these species have been spelled properly, or if there are actually duplicates
-quadrat$SPECIES<-as.factor(quadrat$SPECIES)
-levels(quadrat$SPECIES)
-hectare$SPECIES<-as.factor(hectare$SPECIES)
-levels(hectare$SPECIES)
-# duplicates to change: change "acer capestre"-> acer campestre; "achillea milleflolium"-> achillea milleflolium, "Crateaugus douglasii"->"Crateagus douglasii"; "Crateaugous monogyna"->"Crateagus monogyna"; "Magnolia X soulangeana"->"Magnolia x soulangeana"; "Malus sp"->"Malus sp."; "PLA SOL"->???, "Rosa sp"->"Rosa sp.", "Solanum dulcmara"->"Solanum dulcamara"
-
-## Make a new dataframe with summary stats
-# use summarise() to make a new dataframe with floral richness, abundance
-# First, use lubridate to show R how to read the dates
-
-library(lubridate)
+# Use lubridate to show R how to read the dates
 quadrat$DATE<-as.Date(quadrat$DATE, "%d/%m/%Y")
-hectare$DATE<-as.Date(hectare$DATE, "%m.%d.%Y")
+hectare$DATE<-as.Date(hectare$DATE, "%Y-%m-%d")
 
 # Next, sort original dataframe by month-- this will put the month into the date column, allowing me to group data by month.
-quadrat$MONTH<-month(quadrat$DATE)
-hectare$MONTH<-month(hectare$DATE)
+quadrat$MONTH<-as.factor(month(quadrat$DATE))
+# date has been entered in multiple weird ways so should fix manually in the data sheet,
+# all to same format as quadrat: "%d/%m/%Y"
+hectare$MONTH<-as.factor(month(hectare$DATE))
 
-# Okay time to make the new dataframe
-# First, make sure R is reading the "species" and "date" columns as factors
-
-quadrat$SPECIES<-as.factor(quadrat$SPECIES)
-quadrat$DATE<-as.factor(quadrat$DATE)
-quadrat$NUM_FLORAL_UNITS<-as.numeric(quadrat$NUM_FLORAL_UNITS)
-
-hectare$SPECIES<-as.factor(hectare$SPECIES)
-hectare$DATE<-as.factor(hectare$DATE)
-hectare$NUM_FLORAL_UNITS<-as.numeric(hectare$NUM_FLORAL_UNITS)
+# Make sure we are counting NA's (no flowers detected) as an abundance of 0 
+# Later confirm that we are not counting this row included in a species richness count
+quadrat$NUM_FLORAL_UNITS[is.na(quadrat$NUM_FLORAL_UNITS)]<-0
+hectare$NUM_FLORAL_UNITS[is.na(hectare$NUM_FLORAL_UNITS)]<-0
 
 # Make a new dataframe with total species and abudance counts (i.e. total number of species and number of floral units observed for each park)
 # Changed abundances to per square metre aka divide by 20
 
-quadrat %>% 
+# should redo this by round - since that's where we will be focusing for bees,
+# and becuase it's our finest level of data
+
+# what is TOT_COUNTS_QUAD1 used for?
+
+TOT_COUNTS_QUAD1 <- quadrat %>% 
   #na.omit() %>% 
   group_by(SITE, TREATMENT) %>% 
   mutate(TOT_ABUND=((sum(NUM_FLORAL_UNITS))/20),
@@ -102,11 +92,10 @@ quadrat %>%
             AUG_TOT_RICH=n_distinct(subset(SPECIES, MONTH=="8")),
             MEAN_ABUND=mean(c(subset(NUM_FLORAL_UNITS, MONTH=="5"), subset(NUM_FLORAL_UNITS, MONTH=="6"), subset(NUM_FLORAL_UNITS, MONTH=="7"), subset(NUM_FLORAL_UNITS, MONTH=="8"))),
             MEAN_RICH=mean(c(MAY_TOT_RICH, JUN_TOT_RICH, JUL_TOT_RICH, AUG_TOT_RICH))
-         )->TOT_COUNTS_QUAD1
+         )
 
-quadrat$NUM_FLORAL_UNITS[is.na(quadrat$NUM_FLORAL_UNITS)]<-0
 
-quadrat %>% 
+TOT_COUNTS_QUAD <- quadrat %>% 
   group_by(SITE, TREATMENT) %>% 
   summarise(TOT_ABUND=((sum(NUM_FLORAL_UNITS))/20),
          TOT_RICHNESS=n_distinct(SPECIES),
@@ -120,9 +109,7 @@ quadrat %>%
          AUG_TOT_RICH=n_distinct(subset(SPECIES, MONTH=="8")),
          MEAN_ABUND=mean(c(subset(NUM_FLORAL_UNITS, MONTH=="5"), subset(NUM_FLORAL_UNITS, MONTH=="6"), subset(NUM_FLORAL_UNITS, MONTH=="7"), subset(NUM_FLORAL_UNITS, MONTH=="8"))),
          MEAN_RICH=mean(c(MAY_TOT_RICH, JUN_TOT_RICH, JUL_TOT_RICH, AUG_TOT_RICH))
-  )->TOT_COUNTS_QUAD
-
-
+  )
 
 # Same table, but for hectare data
 levels(hectare$SITE)
@@ -174,6 +161,57 @@ ggplot(TOT_COUNTS_QUAD, aes(x=TREATMENT, y=MEAN_ABUND))+
   geom_point()
 
 t.test(MEAN_ABUND~TREATMENT, data=TOT_COUNTS_QUAD, var.equal=FALSE)
+
+# JCU: taking the mean might condense the data down a little bit more if there is more
+# variation in one group versus another. Either way, we don't want to lose the unique inform
+# from those repeated samples from each park. We actually have ~18 * 7 = 126 data points, not just 18.
+# Hence we should used mixed effects linear models for estimating effect of treatment
+# on floral abundance and diversity, as in:
+quadrat_site_by_round <- quadrat %>%
+  group_by(SITE, ROUND) %>%
+  # calculate floral abundance at the site visit (from all flower species)
+  mutate(floral_abundance = sum(NUM_FLORAL_UNITS)) %>%
+  # calculate species richness at the site visit
+  # don't want to calculate rows of 0 abundance as a species
+  mutate(species_richness = length(NUM_FLORAL_UNITS[NUM_FLORAL_UNITS>0])) %>%
+  # now filter for distinct
+  distinct(SITE, ROUND, .keep_all = TRUE) %>%
+  select(SITE, ROUND, TREATMENT, floral_abundance, species_richness) %>%
+  ungroup()
+
+# null model
+(m1_quadrat_floral_abundance <- lmer(data = quadrat_site_by_round,
+                                    floral_abundance ~ 
+                                      (1|SITE)))
+
+summary(m1_quadrat_floral_abundance)
+
+# treatment effect model
+(m2_quadrat_floral_abundance <- lmer(data = quadrat_site_by_round,
+                                     floral_abundance ~ TREATMENT + 
+                                       (1|SITE)))
+summary(m2_quadrat_floral_abundance)
+
+# model two is not particularly better than model 1 (suggesting weak if any effect
+# of the treatment on the abundance)
+anova(m1_quadrat_floral_abundance, m2_quadrat_floral_abundance)
+
+# bayesian model
+library(rstanarm)
+m3_stan_quadrat_floral_abundance <- stan_lmer(data = quadrat_site_by_round,
+                                    floral_abundance ~ TREATMENT + 
+                                      (1|SITE))
+
+m3_stan_quadrat_floral_abundance
+m3_stan_quadrat_floral_abundance[1] # site intercepts
+# Although negative effect of mowing, the estimate for TREATMENT does not overlap 
+# with 0 at the 50% credible interval,
+# but DOES overlap with 0 at the 95% credible interval,
+# suggesting weak if any effect of the treatment on the floral abundance
+posterior_interval(m3_stan_quadrat_floral_abundance)
+
+
+
 
 # Boxplot showing difference between treatments over the four months of surveys
 
