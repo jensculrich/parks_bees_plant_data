@@ -297,8 +297,20 @@ bee_data %>%
 # 674 individuals are in Bombus-- about 674/1869 total individuals
 # first, add genera to each observation using mutate
 
-bee_data1 %>% 
-  mutate(genus= case_when((bee_id=="Bombus ?"|bee_id=="Bombus impatiens"|bee_id=="Bombus mixtus"|bee_id=="Bombus sp."|bee_id=="Bombus flavifrons"|bee_id=="Bombus melanopygus"|bee_id=="Bombus nevadensis"|bee_id=="Bombus vosnesenskii")~"Bombus", (bee_id=="Halictus"|bee_id=="Halictus "|bee_id=="Halictus rubicundus")~"Halictus", (bee_id=="Agapostemon")~"Agapestemon", (bee_id=="Anthidium")~"Anthidium", (bee_id=="Andrena")~"Andrena", (bee_id=="Apis mellifera")~"Apis", (bee_id=="Ceratina")~"Ceratina", (bee_id=="Colletes")~"Colletes", (bee_id=="Hoplitis")~"Hoplitis", (bee_id=="Hylaeus")~"Hylaeus", (bee_id=="Lasioglossum")~"Lasioglossum", (bee_id=="Megachile")~"Megachile", (bee_id=="Melecta")~"Melecta", (bee_id=="Melissodes")~"Melissodes", (bee_id=="Nomada")~"Nomada", (bee_id=="Osmia")~"Osmia", (bee_id=="Sphecodes")~"Sphecodes", (bee_id=="Syrphidae")~"Syrphidae", TRUE~"Other"))->bee_data_genus
+bee_data_genus <- bee_data1 %>% 
+  mutate(genus= case_when(
+    (bee_id=="Bombus ?"|bee_id=="Bombus impatiens"|bee_id=="Bombus mixtus"|
+       bee_id=="Bombus sp."|bee_id=="Bombus flavifrons"|bee_id=="Bombus melanopygus"|
+       bee_id=="Bombus nevadensis"|bee_id=="Bombus vosnesenskii")~"Bombus", 
+    (bee_id=="Halictus"|bee_id=="Halictus "|bee_id=="Halictus rubicundus")~"Halictus", 
+    (bee_id=="Agapostemon")~"Agapestemon", (bee_id=="Anthidium")~"Anthidium", 
+    (bee_id=="Andrena")~"Andrena", (bee_id=="Apis mellifera")~"Apis", 
+    (bee_id=="Ceratina")~"Ceratina", (bee_id=="Colletes")~"Colletes", 
+    (bee_id=="Hoplitis")~"Hoplitis", (bee_id=="Hylaeus")~"Hylaeus", 
+    (bee_id=="Lasioglossum")~"Lasioglossum", (bee_id=="Megachile")~"Megachile", 
+    (bee_id=="Melecta")~"Melecta", (bee_id=="Melissodes")~"Melissodes", 
+    (bee_id=="Nomada")~"Nomada", (bee_id=="Osmia")~"Osmia", 
+    (bee_id=="Sphecodes")~"Sphecodes", (bee_id=="Syrphidae")~"Syrphidae", TRUE~"Other"))
 
 # For the purposes of making a table with the number of genera in each park, let's get rid of the unknown, or "other" genera
 # bee_data_genus %>% 
@@ -423,7 +435,60 @@ sum(most_common_plants$numobservations)
 # five most common plants being netted off of are trifolium repens, Hypochaeris radicata, Crepis capillaris, Achillea millefolium, and Ranunculus repens
 # note that there are 37 bee ids that have no associated plant species
 
+# JCU: estmate effect of treatment on abundance (request by parks for newspaper article):
+bee_data <- read.csv("./bee_data_2021.csv")
 
+bee_data1 <- bee_data %>% 
+  mutate(TREATMENT=ifelse(site=="rupert"|site=="slocan"|site=="bobolink"|
+                            site=="gordon"|site=="moberly"|site=="winona"|
+                            site=="balaclava"|site=="quilchena"|site=="kensington",
+                          "1", "0"))
+
+bees_site_by_round <- bee_data1 %>%
+  group_by(site, sampling_round) %>%
+  # for now, let's just get rid of honey bees
+  filter(bee_id != "Apis mellifera") %>%
+  # calculate bee abundance at the site visit
+  # don't want to calculate rows of 0 abundance as a species
+  add_count() %>%
+  rename("bee_abundance" = "n") %>%
+  # now filter for distinct
+  distinct(site, sampling_round, .keep_all = TRUE) %>%
+  select(site, sampling_round, TREATMENT, bee_abundance) %>%
+  ungroup()
+
+library(lme4)
+
+# null model
+(m1_bee_abundance <- lmer(data = bees_site_by_round,
+                                     bee_abundance ~ 
+                                       (1|site)))
+
+summary(m1_bee_abundance)
+
+# treatment effect model
+(m2_bee_abundance <- lmer(data = bees_site_by_round,
+                          bee_abundance ~ TREATMENT + 
+                                       (1|site)))
+summary(m2_bee_abundance)
+
+# model two is not particularly better than model 1 (suggesting weak if any effect
+# of the treatment on the abundance)
+anova(m1_bee_abundance, m2_bee_abundance)
+
+# bayesian model
+library(rstanarm)
+m3_stan_bee_abundance <- stan_lmer(data = bees_site_by_round,
+                                              bee_abundance ~ TREATMENT + 
+                                                (1|site))
+
+m3_stan_bee_abundance
+m3_stan_bee_abundance[1] # site intercepts
+# Although negative effect of mowing, the estimate for TREATMENT does not overlap 
+# with 0 at the 50% credible interval,
+# but DOES overlap with 0 at the 95% credible interval,
+# suggesting weak if any effect of the treatment on the floral abundance
+posterior_interval(m3_stan_quadrat_floral_abundance)
   
 
 
